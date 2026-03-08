@@ -1,15 +1,14 @@
 // server.js (ESM + node-fetch v3 + raw-body + auto-refreshing eBay OAuth token)
 import express from 'express';
-import sealedRoutes from './routes/sealedRoutes.js';
 import productRoutes from './routes/productRoutes.js';
 import collectionRoutes from './routes/collectionRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import groceriesRoutes from './routes/groceriesRoutes.js';
 import { createVerify, createPublicKey, createHash } from 'crypto';
 import fetch from 'node-fetch';
 import { createServer } from 'http';
 import { config } from 'dotenv';
 import getRawBody from 'raw-body';
-import { deleteMarketplaceUser } from './services//ebay/deleteMarketplaceUser.js';
 
 // ─── Load environment variables from .env ───────────────────────────────────────
 config();
@@ -66,12 +65,33 @@ async function getEbayToken() {
 // ─── EXPRESS SETUP ─────────────────────────────────────────────────────────────
 const app  = express();
 const port = process.env.PORT || 3000;
+let sealedRoutes = null;
+// Allow local frontend access from Vite dev server.
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  return next();
+});
 
 // ─── Core API mounts ───────────────────────────────────────
-app.use('/api/cards',      sealedRoutes);      //   /api/cards/search?q=…
+try {
+  ({ default: sealedRoutes } = await import('./routes/sealedRoutes.js'));
+  app.use('/api/cards', sealedRoutes); // /api/cards/search?q=...
+} catch (err) {
+  console.error(
+    'Skipping /api/cards route: database-dependent routes failed to initialize.',
+    err.message
+  );
+  app.use('/api/cards', (_req, res) => {
+    res.status(503).json({ error: 'Cards service is temporarily unavailable' });
+  });
+}
 app.use('/api/products',   productRoutes);     //   /api/products/…
 app.use('/api/collection', collectionRoutes);  //   /api/collection/…
 app.use('/api/auth',       authRoutes);        //   /api/auth/…
+app.use('/api/groceries',  groceriesRoutes);   //   /api/groceries/:item
 
 // ─── Raw-body parser for webhook POSTs ─────────────────────────────────────────
 app.post('/api/ebay-deletion-notice', (req, res, next) => {
@@ -170,6 +190,7 @@ app.post('/api/ebay-deletion-notice', async (req, res) => {
     console.log('✅ Signature verified, payload:', req.body);
     const { userId, username } = req.body.notification?.data || {};
     try {
+      const { deleteMarketplaceUser } = await import('./services/ebay/deleteMarketplaceUser.js');
       await deleteMarketplaceUser({ userId, username });
     } catch (dbErr) {
       console.error('❌ DB cleanup failed:', dbErr);
