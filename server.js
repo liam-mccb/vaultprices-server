@@ -66,12 +66,30 @@ async function getEbayToken() {
 const app  = express();
 const port = process.env.PORT || 3000;
 let sealedRoutes = null;
-// Allow local frontend access from Vite dev server.
+const ALLOWED_ORIGINS = new Set([
+  'https://vaultprices.com',
+  'https://www.vaultprices.com',
+  'http://localhost:5173',
+]);
+
+// Allow CORS only for approved frontend origins.
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  const origin = req.headers.origin;
+
+  // Non-browser requests (no Origin header) should keep working.
+  if (!origin) {
+    return next();
+  }
+
+  if (ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+  }
+
   return next();
 });
 
