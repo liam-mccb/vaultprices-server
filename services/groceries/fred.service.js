@@ -1,16 +1,12 @@
 import fetch from 'node-fetch';
+import { GROCERY_ITEMS, resolveCuratedGrocery } from './catalog.js';
+import { findGroceryCandidates } from './fredSearch.service.js';
+import { normalizeSearchInput } from './normalize.js';
 
-export const GROCERY_SERIES_BY_ITEM = Object.freeze({
-  eggs: 'APU0000708111',
-  milk: 'APU0000709112',
-  bread: 'APU0000702111',
-  bananas: 'APU0000711211',
-  chicken: 'APU0000706111'
-});
-
-export const GROCERY_ITEMS = Object.freeze(Object.keys(GROCERY_SERIES_BY_ITEM));
+export { GROCERY_ITEMS } from './catalog.js';
 
 const FRED_OBSERVATIONS_ENDPOINT = 'https://api.stlouisfed.org/fred/series/observations';
+const GROCERY_SOURCE_NAME = 'FRED';
 
 function createHttpError(statusCode, message) {
   const err = new Error(message);
@@ -18,21 +14,17 @@ function createHttpError(statusCode, message) {
   return err;
 }
 
-export async function fetchGroceryHistory(item) {
-  const normalizedItem = String(item || '').toLowerCase().trim();
-  const seriesId = GROCERY_SERIES_BY_ITEM[normalizedItem];
-
-  if (!seriesId) {
-    throw createHttpError(400, `Unsupported grocery item: ${item}`);
-  }
-
+function getFredApiKey() {
   const apiKey = process.env.FRED_API_KEY;
   if (!apiKey) {
     throw createHttpError(500, 'FRED_API_KEY is missing');
   }
+  return apiKey;
+}
 
+async function fetchSeriesObservations(seriesId) {
   const query = new URLSearchParams({
-    api_key: apiKey,
+    api_key: getFredApiKey(),
     file_type: 'json',
     series_id: seriesId,
     sort_order: 'asc'
@@ -59,12 +51,64 @@ export async function fetchGroceryHistory(item) {
     }));
 
   return {
-    item: normalizedItem,
-    seriesId,
-    name: normalizedItem,
     unit: data.units || '',
-    currentPrices: [],
     history: points.map((p) => ({ date: p.date, price: p.price })),
     data: points
+  };
+}
+
+export async function resolveGrocerySeries(item) {
+  const normalizedQuery = normalizeSearchInput(item);
+  if (!normalizedQuery) {
+    throw createHttpError(400, 'Grocery item is required');
+  }
+
+  const curatedMatch = resolveCuratedGrocery(normalizedQuery);
+  if (curatedMatch?.preferredSeriesId) {
+    return {
+      requestedItem: normalizedQuery,
+      canonicalItem: curatedMatch.canonicalKey,
+      canonicalName: curatedMatch.canonicalName,
+      seriesId: curatedMatch.preferredSeriesId,
+      sourceName: GROCERY_SOURCE_NAME,
+      matchType: 'curated',
+      candidates: []
+    };
+  }
+
+  const searchResult = await findGroceryCandidates(normalizedQuery);
+  const selected = searchResult.candidates[0];
+
+  if (!selected) {
+    throw createHttpError(404, `No grocery series found for: ${item}`);
+  }
+
+  return {
+    requestedItem: normalizedQuery,
+    canonicalItem: curatedMatch?.canonicalKey || normalizedQuery,
+    canonicalName: curatedMatch?.canonicalName || normalizedQuery,
+    seriesId: selected.seriesId,
+    sourceName: GROCERY_SOURCE_NAME,
+    matchType: curatedMatch ? 'curated-fallback' : 'fred-search',
+    candidates: searchResult.candidates
+  };
+}
+
+export async function fetchGroceryHistory(item) {
+  const resolved = await resolveGrocerySeries(item);
+  const seriesData = await fetchSeriesObservations(resolved.seriesId);
+
+  return {
+    item: resolved.canonicalItem,
+    requestedItem: resolved.requestedItem,
+    seriesId: resolved.seriesId,
+    name: resolved.canonicalItem,
+    canonicalName: resolved.canonicalName,
+    sourceName: resolved.sourceName,
+    unit: seriesData.unit,
+    currentPrices: [],
+    history: seriesData.history,
+    data: seriesData.data,
+    matchType: resolved.matchType
   };
 }

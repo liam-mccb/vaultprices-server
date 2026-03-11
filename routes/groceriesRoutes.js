@@ -1,18 +1,48 @@
 import { Router } from 'express';
 import { fetchGroceryHistory, GROCERY_ITEMS } from '../services/groceries/fred.service.js';
+import { findGroceryCandidates } from '../services/groceries/fredSearch.service.js';
+import { normalizeSearchInput } from '../services/groceries/normalize.js';
 
 const router = Router();
 
-router.get('/:item', async (req, res, next) => {
+router.get('/search', async (req, res) => {
   try {
-    const item = String(req.params.item || '').toLowerCase().trim();
-    if (!GROCERY_ITEMS.includes(item)) {
+    const query = String(req.query.q || req.query.query || '').trim();
+    if (!query) {
       return res.status(400).json({
-        error: 'Unsupported grocery item',
+        error: 'Query is required',
         supportedItems: GROCERY_ITEMS
       });
     }
 
+    const result = await findGroceryCandidates(query, { maxCandidates: 5 });
+    return res.json({
+      query,
+      normalizedQuery: normalizeSearchInput(query),
+      curatedMatch: result.curatedMatch
+        ? {
+            canonicalItem: result.curatedMatch.canonicalKey,
+            canonicalName: result.curatedMatch.canonicalName,
+            preferredSeriesId: result.curatedMatch.preferredSeriesId
+          }
+        : null,
+      sourceName: 'FRED',
+      candidates: result.candidates
+    });
+  } catch (err) {
+    const statusCode = err.statusCode || 500;
+    if (statusCode >= 500) {
+      console.error('Groceries search route error:', err.message);
+    }
+    return res.status(statusCode).json({
+      error: err.message || 'Failed to search grocery data'
+    });
+  }
+});
+
+router.get('/:item', async (req, res) => {
+  try {
+    const item = String(req.params.item || '').trim();
     const data = await fetchGroceryHistory(item);
     return res.json(data);
   } catch (err) {
@@ -21,7 +51,8 @@ router.get('/:item', async (req, res, next) => {
       console.error('Groceries route error:', err.message);
     }
     return res.status(statusCode).json({
-      error: err.message || 'Failed to fetch grocery data'
+      error: err.message || 'Failed to fetch grocery data',
+      supportedItems: GROCERY_ITEMS
     });
   }
 });
