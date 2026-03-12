@@ -1,6 +1,5 @@
 import { Router } from 'express';
-import { fetchGroceryHistory, GROCERY_ITEMS } from '../services/groceries/fred.service.js';
-import { findGroceryCandidates } from '../services/groceries/fredSearch.service.js';
+import { fetchGroceryHistory, findGroceryCandidates, GROCERY_ITEMS } from '../services/groceries/groceries.service.js';
 import { normalizeSearchInput } from '../services/groceries/normalize.js';
 
 const router = Router();
@@ -20,13 +19,9 @@ router.get('/search', async (req, res) => {
       query,
       normalizedQuery: normalizeSearchInput(query),
       curatedMatch: result.curatedMatch
-        ? {
-            canonicalItem: result.curatedMatch.canonicalKey,
-            canonicalName: result.curatedMatch.canonicalName,
-            preferredSeriesId: result.curatedMatch.preferredSeriesId
-          }
+        ? result.curatedMatch
         : null,
-      sourceName: 'FRED',
+      sourceName: result.candidates[0]?.sourceName || result.curatedMatch?.sourceName || null,
       candidates: result.candidates
     });
   } catch (err) {

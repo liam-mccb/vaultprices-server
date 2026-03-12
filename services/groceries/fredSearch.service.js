@@ -5,6 +5,7 @@ import { normalizeSearchInput, tokenizeSearchInput } from './normalize.js';
 const FRED_SERIES_SEARCH_ENDPOINT = 'https://api.stlouisfed.org/fred/series/search';
 const MAX_FRED_SEARCH_RESULTS = 25;
 const MAX_GROCERY_CANDIDATES = 5;
+export const FRED_SOURCE_NAME = 'FRED';
 
 function createHttpError(statusCode, message) {
   const err = new Error(message);
@@ -174,7 +175,7 @@ async function searchFredSeries(searchText) {
   return Array.isArray(data.seriess) ? data.seriess : [];
 }
 
-export async function findGroceryCandidates(query, options = {}) {
+export async function findFredCandidates(query, options = {}) {
   const normalizedQuery = normalizeSearchInput(query);
   if (!normalizedQuery) {
     return {
@@ -221,4 +222,8 @@ export async function findGroceryCandidates(query, options = {}) {
     curatedMatch,
     candidates
   };
+}
+
+export async function findGroceryCandidates(query, options = {}) {
+  return findFredCandidates(query, options);
 }
