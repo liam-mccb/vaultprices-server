@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { fetchGroceryHistory, findGroceryCandidates, GROCERY_ITEMS } from '../services/groceries/groceries.service.js';
 import { normalizeSearchInput } from '../services/groceries/normalize.js';
+import { fetchUsdaReports } from '../services/groceries/usda.service.js';
 
 const router = Router();
 
@@ -31,6 +32,21 @@ router.get('/search', async (req, res) => {
     }
     return res.status(statusCode).json({
       error: err.message || 'Failed to search grocery data'
+    });
+  }
+});
+
+router.get('/usda/reports', async (req, res) => {
+  try {
+    const data = await fetchUsdaReports({ limit: req.query.limit });
+    return res.json(data);
+  } catch (err) {
+    const statusCode = err.statusCode || 500;
+    if (statusCode >= 500) {
+      console.error('USDA reports route error:', err.message);
+    }
+    return res.status(statusCode).json({
+      error: err.message || 'Failed to fetch USDA reports'
     });
   }
 });
