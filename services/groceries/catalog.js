@@ -4,7 +4,7 @@ const catalogSeed = [
   {
     canonicalName: 'eggs',
     preferredSeriesId: 'APU0000708111',
-    aliases: ['egg', 'eggs', 'large eggs', 'dozen eggs', 'grade a eggs']
+    aliases: ['egg', 'eggs', 'large eggs', 'dozen eggs', 'grade a eggs', 'shell eggs', 'table eggs', 'egg products']
   },
   {
     canonicalName: 'milk',
@@ -24,7 +24,7 @@ const catalogSeed = [
   {
     canonicalName: 'chicken',
     preferredSeriesId: 'APU0000706111',
-    aliases: ['chicken', 'fresh chicken', 'chicken breast', 'boneless chicken breast']
+    aliases: ['chicken', 'fresh chicken', 'chicken breast', 'boneless chicken breast', 'broiler', 'broilers', 'fryer', 'fryers', 'whole bird']
   },
   {
     canonicalName: 'apples',
@@ -44,12 +44,12 @@ const catalogSeed = [
   {
     canonicalName: 'ground beef',
     preferredSeriesId: null,
-    aliases: ['ground beef', 'hamburger', 'hamburger meat']
+    aliases: ['ground beef', 'hamburger', 'hamburger meat', 'ground chuck', 'ground round']
   },
   {
     canonicalName: 'beef',
     preferredSeriesId: null,
-    aliases: ['beef', 'steak']
+    aliases: ['beef', 'steak', 'cattle', 'boxed beef']
   },
   {
     canonicalName: 'bacon',
@@ -197,4 +197,24 @@ for (const item of GROCERY_CATALOG) {
 export function resolveCuratedGrocery(value) {
   const normalized = normalizeSearchInput(value);
   return GROCERY_ALIAS_INDEX.get(normalized) || null;
+}
+
+export function getGrocerySearchTerms(value) {
+  const normalized = normalizeSearchInput(value);
+  if (!normalized) {
+    return [];
+  }
+
+  const directMatch = resolveCuratedGrocery(normalized);
+  if (directMatch) {
+    return [...directMatch.aliases];
+  }
+
+  const matchedItems = GROCERY_CATALOG.filter(
+    (item) =>
+      item.canonicalKey.includes(normalized) ||
+      item.aliases.some((alias) => alias.includes(normalized) || normalized.includes(alias))
+  );
+
+  return [...new Set(matchedItems.flatMap((item) => item.aliases))];
 }
